@@ -7,6 +7,9 @@ on:
 jobs:
   build-and-test:
     runs-on: [self-hosted, netcup]
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
 
@@ -16,8 +19,16 @@ jobs:
       - name: Test
         run: devbox run test
 
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v3.0.0
+        with:
+          name: Test Results
+          path: build/test-results/test/*.xml
+          reporter: java-junit
+
       - name: Upload test reports
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
