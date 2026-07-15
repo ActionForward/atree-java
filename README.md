@@ -2,22 +2,39 @@
 
 A minimal Spring Boot demo exposing a single `/hello-world` endpoint.
 
+## Requirements
+
+- **[Devbox](https://www.jetify.com/devbox)** — the only tool you need to install yourself. It provisions the rest of the toolchain (JDK, Gradle), so you don't need Java or Gradle on your host.
+
 ## Stack
 
 - **Spring Boot** 4.1.0
 - **Java** 21 (Eclipse Temurin)
 - **Gradle** with the Kotlin DSL (`build.gradle.kts`)
-- **[Devbox](https://www.jetify.com/devbox)** to provision the toolchain (JDK, Gradle) and expose convenience scripts
+- **Devbox** to provision the toolchain (JDK, Gradle) and expose convenience scripts
 
 ## Getting started
 
-Install [Devbox](https://www.jetify.com/devbox/docs/installing_devbox/), then from the repo root:
+### 1. Install Devbox
+
+```bash
+curl -fsSL https://get.jetify.com/devbox | bash
+```
+
+See the [official install docs](https://www.jetify.com/devbox/docs/installing_devbox/) for other install methods (Nix, Homebrew, etc.).
+
+### 2. Launch a shell
 
 ```bash
 # Enter a shell with the JDK and Gradle on PATH
 devbox shell
+```
 
-# Or run a one-off command without entering the shell
+### 3. Build, test, or run
+
+Either from inside `devbox shell`, or as one-off commands without entering the shell:
+
+```bash
 devbox run build
 devbox run test
 devbox run run

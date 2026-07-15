@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: [self-hosted, netcup]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jetify-com/devbox-install-action@v0.13.0
+
+      - name: Build
+        run: devbox run build
+
+      - name: Test
+        run: devbox run test
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests
