@@ -18,6 +18,7 @@ Defined in `devbox.json`:
 |---------------------|-------------------|
 | `devbox run build`  | `gradle assemble testClasses` — generates ANTLR sources, compiles main and test sources and builds the jar, without running tests |
 | `devbox run test`   | `gradle test` — runs the tests compiled by `build` |
+| `devbox run jmh`    | `gradle jmh` — runs the JMH performance benchmarks under `src/jmh/` |
 | `devbox run clean`  | `gradle clean`    |
 
 ## Project structure
@@ -31,6 +32,11 @@ Defined in `devbox.json`:
   imaginary tokens produced by re-typing IDENTs against the vocabulary, never lexer keywords
 - `src/test/java/` — JUnit 5 tests, including a randomized differential test against a
   three-valued brute-force evaluator (`ATreeTests.randomizedExpressionsMatchBruteForce`)
+- `src/jmh/java/com/actionforward/atree/jmh/` — JMH benchmarks (`me.champeau.jmh` plugin):
+  `IndexBuildBenchmark` (`subscribe`, Alg. 2–4), `MatchBenchmark` (`match`, Alg. 6),
+  `UnsubscribeBenchmark` (`unsubscribe`, Alg. 5), sharing seeded random expression/event
+  generators from the package-private `Corpus`. Default iteration counts in `build.gradle.kts`
+  are kept low for fast local runs; raise them before trusting a result
 
 ## Conventions
 

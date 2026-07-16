@@ -1,6 +1,7 @@
 plugins {
     `java-library`
     antlr
+    id("me.champeau.jmh") version "0.7.2"
 }
 
 group = "com.actionforward"
@@ -38,4 +39,23 @@ tasks.withType<Test> {
     useJUnitPlatform()
     maxParallelForks = 1
     maxHeapSize = "384m"
+}
+
+// Kept modest so `devbox run jmh` finishes in minutes by default; bump these before
+// trusting a result for anything other than local iteration.
+jmh {
+    warmupIterations = 2
+    warmup = "1s"
+    iterations = 3
+    timeOnIteration = "1s"
+    fork = 1
+    benchmarkMode.add("avgt")
+    timeUnit = "us"
+    resultFormat = "TEXT"
+}
+
+// me.champeau.jmh 0.7.2's jmhJar task serializes a Project reference, which the configuration
+// cache (enabled repo-wide in gradle.properties) rejects; opt it out rather than the whole build.
+tasks.named("jmhJar") {
+    notCompatibleWithConfigurationCache("me.champeau.jmh jmhJar leaks a Project reference (plugin issue)")
 }
