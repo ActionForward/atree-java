@@ -61,8 +61,8 @@ invokes Gradle directly.
   and tests in a single Gradle invocation/JVM startup.
 - **Test reporting**: [`EnricoMi/publish-unit-test-result-action`](https://github.com/EnricoMi/publish-unit-test-result-action),
   chosen for richer rendering (PR comments, inline annotations) than simpler alternatives. Uses
-  the `/composite@v2` variant (Python-based, runs directly on the runner) rather than the default
-  Docker container action, so no `docker` group membership is needed on the runner.
+  the `/linux@v2` variant (Docker container action; the `composite` variant is deprecated), so the
+  runner's user needs to be in the `docker` group.
 - **Permissions**: `contents: read`, `issues: read`, `checks: write`, `pull-requests: write` — the
   superset needed for a private repo, used unconditionally so the same `ci.yml` works whether a
   given project's repo is public or private.
