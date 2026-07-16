@@ -1,5 +1,7 @@
 # ai-automation demo
 
+[![Tests](https://gist.githubusercontent.com/neoXfire/bbf3758964337822462500444a3a6b3e/raw/badge.svg)](https://github.com/ActionForward/ai-automation/actions/workflows/ci.yml)
+
 A minimal Spring Boot demo exposing a single `/hello-world` endpoint.
 
 ## Requirements
@@ -53,7 +55,9 @@ These same `devbox run <script>` commands can be used from CI or from Claude Cod
 
 ## CI
 
-`.github/workflows/ci.yml` runs `devbox run build` and `devbox run test` on the self-hosted `netcup` runner. Devbox must already be installed on that runner (e.g. via `curl -fsSL https://get.jetify.com/devbox | bash`) — the workflow does not install it per-job.
+`.github/workflows/ci.yml` runs `devbox run -- gradle build --no-daemon` on the self-hosted `netcup` runner. Devbox must already be installed on that runner (e.g. via `curl -fsSL https://get.jetify.com/devbox | bash`) — the workflow does not install it per-job.
+
+Test results are published via [`EnricoMi/publish-unit-test-result-action`](https://github.com/EnricoMi/publish-unit-test-result-action) as a check summary and, on pushes to `main`, as the badge above. The badge SVG is hosted on [this Gist](https://gist.github.com/neoXfire/bbf3758964337822462500444a3a6b3e) and requires a repo secret named `GIST_TOKEN` (a personal access token with `gist` scope) to be set for the upload step to work.
 
 ## Endpoint
 

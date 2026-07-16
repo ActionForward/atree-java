@@ -9,7 +9,9 @@ jobs:
     runs-on: [self-hosted, netcup]
     permissions:
       contents: read
+      issues: read
       checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -19,12 +21,46 @@ jobs:
         run: devbox run -- gradle build --no-daemon
 
       - name: Publish test report
-        if: always()
-        uses: dorny/test-reporter@v3.0.0
+        id: test-results
+        if: (!cancelled())
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          name: Test Results
-          path: build/test-results/test/*.xml
-          reporter: java-junit
+          check_name: Test Results
+          files: build/test-results/test/*.xml
+
+      - name: Set badge color
+        if: (!cancelled())
+        shell: bash
+        run: |
+          case ${{ fromJSON( steps.test-results.outputs.json ).conclusion }} in
+            success)
+              echo "BADGE_COLOR=31c653" >> $GITHUB_ENV
+              ;;
+            failure)
+              echo "BADGE_COLOR=800000" >> $GITHUB_ENV
+              ;;
+            neutral)
+              echo "BADGE_COLOR=696969" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Create badge
+        if: (!cancelled())
+        uses: emibcn/badge-action@f9150fde070fcca0c4e832437611b44838fcd325 # v2.0.4
+        with:
+          label: Tests
+          status: '${{ fromJSON( steps.test-results.outputs.json ).formatted.stats.tests }} tests, ${{ fromJSON( steps.test-results.outputs.json ).formatted.stats.runs }} runs: ${{ fromJSON( steps.test-results.outputs.json ).conclusion }}'
+          color: ${{ env.BADGE_COLOR }}
+          path: badge.svg
+
+      - name: Upload badge to Gist
+        # Only publish the badge for pushes to main, not for pull requests
+        if: (!cancelled()) && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: andymckay/append-gist-action@ab30bf28df67017c7ad696500b218558c7c04db3 # v0.3
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gistURL: https://gist.githubusercontent.com/neoXfire/bbf3758964337822462500444a3a6b3e
+          file: badge.svg
 
       - name: Upload test reports
         if: always()
