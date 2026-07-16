@@ -11,7 +11,6 @@
     "scripts": {
       "build": "gradle assemble testClasses",
       "test": "gradle test",
-      "run": "gradle bootRun",
       "clean": "gradle clean"
     }
   }

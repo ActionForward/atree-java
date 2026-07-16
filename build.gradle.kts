@@ -1,11 +1,10 @@
 plugins {
-    java
-    id("org.springframework.boot") version "4.1.0"
-    id("io.spring.dependency-management") version "1.1.7"
+    `java-library`
+    antlr
 }
 
 group = "com.actionforward"
-version = "0.0.1-SNAPSHOT"
+version = "0.1.0-SNAPSHOT"
 
 java {
     toolchain {
@@ -18,10 +17,21 @@ repositories {
 }
 
 dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework.boot:spring-boot-resttestclient")
-    testImplementation("org.springframework.boot:spring-boot-restclient")
+    antlr("org.antlr:antlr4:4.13.2")
+    implementation("org.antlr:antlr4-runtime:4.13.2")
+    testImplementation(platform("org.junit:junit-bom:5.12.2"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// The antlr plugin leaks the ANTLR tool (compiler) onto the api configuration;
+// consumers only need the runtime, declared above as `implementation`.
+configurations.api {
+    setExtendsFrom(extendsFrom.filterNot { it.name == "antlr" })
+}
+
+tasks.generateGrammarSource {
+    arguments = arguments + listOf("-package", "com.actionforward.atree.grammar", "-no-listener", "-no-visitor")
 }
 
 tasks.withType<Test> {

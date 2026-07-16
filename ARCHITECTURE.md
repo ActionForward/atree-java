@@ -1,7 +1,12 @@
 # Architecture & CI Decisions
 
 This document records the setup decisions behind this project, so they can be reused as a
-starting point for other ActionForward Java/Spring Boot projects.
+starting point for other ActionForward Java projects.
+
+The project itself is a plain Java library (the A-Tree expression-matching index — see
+`README.md`); it uses the `java-library` and `antlr` Gradle plugins. The ANTLR tool is kept off
+the published api/runtime classpath (only `antlr4-runtime` is an `implementation` dependency —
+see the `configurations.api` block in `build.gradle.kts`).
 
 ## Toolchain: Devbox
 
@@ -85,9 +90,10 @@ repository**, pick the new repo's name/visibility under the `ActionForward` org,
    on [nixhub.io](https://www.nixhub.io)).
 2. `build.gradle.kts` → `java.toolchain.languageVersion`: **must match** the JDK version chosen
    in step 1.
-3. `build.gradle.kts` → `id("org.springframework.boot") version "..."`: Spring Boot version.
+3. `build.gradle.kts` → plugins and dependency versions (for this project: the `antlr`
+   tool/runtime pair; for a Spring Boot project: `id("org.springframework.boot") version "..."`).
 4. `build.gradle.kts` → `group`/`version`, `settings.gradle.kts` → `rootProject.name`, and the
-   `com.actionforward.demo` package path under `src/` — rename to match the new project.
+   `com.actionforward.atree` package path under `src/` — rename to match the new project.
 5. If you changed the JDK version, delete `gradle.properties`'s `org.gradle.java.home` line —
    devbox regenerates it correctly on the next `devbox run`.
 6. For the badge: create a **new** Gist for this project (`gh gist create`), swap its ID into
