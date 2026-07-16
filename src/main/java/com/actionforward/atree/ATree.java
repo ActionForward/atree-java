@@ -3,6 +3,7 @@ package com.actionforward.atree;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * A-Tree: a dynamic, multi-rooted index over arbitrary Boolean expressions, after
@@ -33,7 +35,7 @@ import java.util.TreeMap;
  *       propagates {@code true} results.</li>
  *   <li><b>Propagation on demand</b> (Sec. 5.2.2) — an AND node is only triggered through one
  *       designated access child (here: its first child; the paper picks randomly); the results of
- *       its other children are stamped with the event signature and read lazily.</li>
+ *       its other children are recorded in a per-match visited set and read lazily.</li>
  * </ul>
  *
  * <p>Deviations from the paper: {@code useCount} counts parent links as well as subscriptions,
@@ -41,7 +43,12 @@ import java.util.TreeMap;
  * arithmetic, so distinct expressions could theoretically collide (inherent to the paper's
  * arithmetic ID scheme as well).
  *
- * <p>Not thread-safe.
+ * <p>Thread-safe. {@link #match(Event)} takes a shared read lock and keeps all of its per-event
+ * traversal state (queued/visited nodes) local to the call, so any number of matches may run
+ * concurrently without interfering with each other. {@link #subscribe} and {@link #unsubscribe}
+ * mutate the index under an exclusive write lock and never overlap a match or one another. A
+ * single {@link Event} instance is still not safe to pass to concurrent {@code match} calls,
+ * per its own documented contract (supplier memoization is unsynchronized).
  *
  * @param <S> the type of the subscription keys returned by {@link #match(Event)}
  */
@@ -54,8 +61,9 @@ public final class ATree<S> {
     private final Map<S, Node> subscriptions = new LinkedHashMap<>();
     /** Live node count per level, so {@link #maxLevel} can shrink back down as nodes are released. */
     private final TreeMap<Integer, Integer> nodesPerLevel = new TreeMap<>();
+    /** Guards all index state: shared for {@link #match}, exclusive for subscribe/unsubscribe. */
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private long eventStamp;
     private int maxLevel;
 
     /**
@@ -67,12 +75,17 @@ public final class ATree<S> {
     public void subscribe(S key, Expr expression) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(expression, "expression");
-        if (subscriptions.containsKey(key)) {
-            throw new IllegalArgumentException("already subscribed: " + key);
+        lock.writeLock().lock();
+        try {
+            if (subscriptions.containsKey(key)) {
+                throw new IllegalArgumentException("already subscribed: " + key);
+            }
+            Node root = insert(NormExpr.normalize(expression));
+            root.subscribers.add(key);
+            subscriptions.put(key, root);
+        } finally {
+            lock.writeLock().unlock();
         }
-        Node root = insert(NormExpr.normalize(expression));
-        root.subscribers.add(key);
-        subscriptions.put(key, root);
     }
 
     /**
@@ -80,13 +93,18 @@ public final class ATree<S> {
      * (paper Alg. 5). Returns false if the key was not subscribed.
      */
     public boolean unsubscribe(S key) {
-        Node root = subscriptions.remove(key);
-        if (root == null) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            Node root = subscriptions.remove(key);
+            if (root == null) {
+                return false;
+            }
+            root.subscribers.remove(key);
+            release(root);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        root.subscribers.remove(key);
-        release(root);
-        return true;
     }
 
     /**
@@ -96,59 +114,66 @@ public final class ATree<S> {
      */
     @SuppressWarnings("unchecked")
     public Set<S> match(Event event) {
-        long stamp = ++eventStamp;
-        List<ArrayDeque<Node>> queues = new ArrayList<>(maxLevel + 1);
-        for (int i = 0; i <= maxLevel; i++) {
-            queues.add(new ArrayDeque<>());
-        }
+        lock.readLock().lock();
+        try {
+            List<ArrayDeque<Node>> queues = new ArrayList<>(maxLevel + 1);
+            for (int i = 0; i <= maxLevel; i++) {
+                queues.add(new ArrayDeque<>());
+            }
+            // Per-match traversal state, local to this call so concurrent matches never share it.
+            Set<Node> queued = new HashSet<>();
+            Set<Node> trueNodes = new HashSet<>();
 
-        // Predicate matching phase: suppliers are only consulted for attributes the index knows.
-        for (String attr : event.attributes()) {
-            Set<Node> leaves = leavesByAttr.get(attr);
-            if (leaves == null) {
-                continue;
-            }
-            Object value = event.value(attr);
-            if (value == null) {
-                continue;
-            }
-            for (Node leaf : leaves) {
-                if (leaf.predicate.evaluate(value)) {
-                    leaf.queuedStamp = stamp;
-                    queues.get(1).add(leaf);
+            // Predicate matching phase: suppliers are only consulted for attributes the index knows.
+            for (String attr : event.attributes()) {
+                Set<Node> leaves = leavesByAttr.get(attr);
+                if (leaves == null) {
+                    continue;
                 }
-            }
-        }
-
-        // Expression matching phase: level-ordered bottom-to-top traversal.
-        Set<S> matches = new LinkedHashSet<>();
-        for (int level = 1; level < queues.size(); level++) {
-            ArrayDeque<Node> queue = queues.get(level);
-            while (!queue.isEmpty()) {
-                Node node = queue.poll();
-                if (node.kind == Expr.Kind.AND && !allChildrenTrue(node, stamp)) {
-                    continue; // triggered by its access child, but some sibling result is missing
+                Object value = event.value(attr);
+                if (value == null) {
+                    continue;
                 }
-                // Leaves are only queued when satisfied; an OR is queued by a true child.
-                node.trueStamp = stamp;
-                for (Object subscriber : node.subscribers) {
-                    matches.add((S) subscriber);
-                }
-                for (Node parent : node.parents) {
-                    if (parent.queuedStamp != stamp
-                            && (parent.kind == Expr.Kind.OR || parent.accessChild == node)) {
-                        parent.queuedStamp = stamp;
-                        queues.get(parent.level).add(parent);
+                for (Node leaf : leaves) {
+                    if (leaf.predicate.evaluate(value)) {
+                        queued.add(leaf);
+                        queues.get(1).add(leaf);
                     }
                 }
             }
+
+            // Expression matching phase: level-ordered bottom-to-top traversal.
+            Set<S> matches = new LinkedHashSet<>();
+            for (int level = 1; level < queues.size(); level++) {
+                ArrayDeque<Node> queue = queues.get(level);
+                while (!queue.isEmpty()) {
+                    Node node = queue.poll();
+                    if (node.kind == Expr.Kind.AND && !allChildrenTrue(node, trueNodes)) {
+                        continue; // triggered by its access child, but some sibling result is missing
+                    }
+                    // Leaves are only queued when satisfied; an OR is queued by a true child.
+                    trueNodes.add(node);
+                    for (Object subscriber : node.subscribers) {
+                        matches.add((S) subscriber);
+                    }
+                    for (Node parent : node.parents) {
+                        if (!queued.contains(parent)
+                                && (parent.kind == Expr.Kind.OR || parent.accessChild == node)) {
+                            queued.add(parent);
+                            queues.get(parent.level).add(parent);
+                        }
+                    }
+                }
+            }
+            return matches;
+        } finally {
+            lock.readLock().unlock();
         }
-        return matches;
     }
 
-    private static boolean allChildrenTrue(Node node, long stamp) {
+    private static boolean allChildrenTrue(Node node, Set<Node> trueNodes) {
         for (Node child : node.children) {
-            if (child.trueStamp != stamp) {
+            if (!trueNodes.contains(child)) {
                 return false;
             }
         }
@@ -157,12 +182,22 @@ public final class ATree<S> {
 
     /** Number of live index nodes (shared predicates/subexpressions count once). */
     public int nodeCount() {
-        return nodes.size();
+        lock.readLock().lock();
+        try {
+            return nodes.size();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     /** Number of active subscriptions. */
     public int size() {
-        return subscriptions.size();
+        lock.readLock().lock();
+        try {
+            return subscriptions.size();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     /**

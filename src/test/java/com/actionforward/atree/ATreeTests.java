@@ -7,6 +7,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -207,6 +212,100 @@ class ATreeTests {
             assertTrue(tree.unsubscribe(i));
         }
         assertEquals(0, tree.nodeCount());
+    }
+
+    @Test
+    void concurrentMatchesAreConsistent() throws Exception {
+        ATree<Integer> tree = new ATree<>();
+        Random setupRandom = new Random(20260716L);
+        List<Expr> exprs = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            Expr expr = randomExpr(setupRandom, 3);
+            exprs.add(expr);
+            tree.subscribe(i, expr);
+        }
+
+        // Every reader thread matches its own events against the same, unchanging tree; since
+        // match() no longer stamps shared Node fields, concurrent matches must not corrupt or
+        // observe each other's traversal state.
+        int threads = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int t = 0; t < threads; t++) {
+                long seed = 1000L + t;
+                futures.add(pool.submit(() -> {
+                    Random random = new Random(seed);
+                    for (int e = 0; e < 200; e++) {
+                        Event event = randomEvent(random);
+                        Set<Integer> expected = new HashSet<>();
+                        for (int i = 0; i < exprs.size(); i++) {
+                            if (Boolean.TRUE.equals(eval3(exprs.get(i), event))) {
+                                expected.add(i);
+                            }
+                        }
+                        assertEquals(expected, tree.match(event), "event " + event);
+                    }
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    void concurrentSubscribeUnsubscribeAndMatchDoNotCorruptIndex() throws Exception {
+        ATree<String> tree = new ATree<>();
+        int writerThreads = 4;
+        int expressionsPerThread = 25;
+
+        ExecutorService pool = Executors.newFixedThreadPool(writerThreads + 2);
+        try {
+            List<Future<?>> writers = new ArrayList<>();
+            for (int t = 0; t < writerThreads; t++) {
+                int threadIndex = t;
+                writers.add(pool.submit(() -> {
+                    Random random = new Random(4200L + threadIndex);
+                    for (int i = 0; i < expressionsPerThread; i++) {
+                        tree.subscribe(threadIndex + "-" + i, randomExpr(random, 3));
+                    }
+                    for (int i = 0; i < expressionsPerThread; i += 2) {
+                        assertTrue(tree.unsubscribe(threadIndex + "-" + i));
+                    }
+                }));
+            }
+
+            // Reader threads hammer match() throughout, purely to surface any concurrency bugs
+            // (exceptions, corrupted traversal); the index is changing underneath them so their
+            // results aren't checked against a reference here.
+            AtomicBoolean stop = new AtomicBoolean(false);
+            List<Future<?>> readers = new ArrayList<>();
+            for (int r = 0; r < 2; r++) {
+                int readerIndex = r;
+                readers.add(pool.submit(() -> {
+                    Random random = new Random(9000L + readerIndex);
+                    while (!stop.get()) {
+                        tree.match(randomEvent(random));
+                    }
+                }));
+            }
+
+            for (Future<?> writer : writers) {
+                writer.get(30, TimeUnit.SECONDS);
+            }
+            stop.set(true);
+            for (Future<?> reader : readers) {
+                reader.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdown();
+        }
+
+        // Half of each thread's expressions remain subscribed; no update was lost or duplicated.
+        assertEquals(writerThreads * (expressionsPerThread / 2), tree.size());
     }
 
     private static void verifyAgainstBruteForce(ATree<Integer> tree, List<Expr> exprs,

@@ -36,10 +36,6 @@ final class Node {
     /** Number of direct references: parent links plus subscriptions (paper Sec. 4.2.3/4.2.4). */
     int useCount;
 
-    // Per-event matching state, stamped with the event signature (lazy cleaning, Sec. 5.2.2).
-    long queuedStamp;
-    long trueStamp;
-
     Node(long id, Predicate predicate) {
         this.id = id;
         this.kind = Expr.Kind.PREDICATE;
