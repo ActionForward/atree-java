@@ -56,11 +56,15 @@ jobs:
       - name: Upload badge to Gist
         # Only publish the badge for pushes to main, not for pull requests
         if: (!cancelled()) && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: andymckay/append-gist-action@ab30bf28df67017c7ad696500b218558c7c04db3 # v0.3
+        uses: actions/github-script@v9
         with:
-          token: ${{ secrets.GIST_TOKEN }}
-          gistURL: https://gist.githubusercontent.com/neoXfire/bbf3758964337822462500444a3a6b3e
-          file: badge.svg
+          github-token: ${{ secrets.GIST_TOKEN }}
+          script: |
+            const fs = require('fs');
+            await github.rest.gists.update({
+              gist_id: 'bbf3758964337822462500444a3a6b3e',
+              files: { 'badge.svg': { content: fs.readFileSync('badge.svg', 'utf8') } }
+            });
 
       - name: Upload test reports
         if: always()
