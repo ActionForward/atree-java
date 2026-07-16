@@ -28,6 +28,22 @@ class PredicateTests {
     }
 
     @Test
+    void largeLongsCompareExactly() {
+        // Beyond 2^53 doubles can't represent every integer exactly, so these two distinct longs
+        // (e.g. snowflake IDs, nanosecond timestamps) collapse to the same double via
+        // doubleValue() and must be compared via longValue() instead.
+        long a = (1L << 60) + 1;
+        long b = (1L << 60) + 3;
+        assertEquals((double) a, (double) b, 0.0, "test fixture must exercise double precision loss");
+
+        assertFalse(Predicate.of("id", Op.EQ, a).evaluate(b));
+        assertTrue(Predicate.of("id", Op.EQ, a).evaluate(a));
+        assertTrue(Predicate.of("id", Op.LT, b).evaluate(a));
+        assertFalse(Predicate.of("id", Op.LT, a).evaluate(b));
+        assertNotEquals(Predicate.of("id", Op.EQ, a).id(), Predicate.of("id", Op.EQ, b).id());
+    }
+
+    @Test
     void stringsCompareLexicographically() {
         assertTrue(Predicate.of("name", Op.LT, "bob").evaluate("alice"));
         assertTrue(Predicate.of("name", Op.EQ, "alice").evaluate("alice"));

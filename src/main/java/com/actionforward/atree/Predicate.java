@@ -109,6 +109,9 @@ public final class Predicate {
 
     private static boolean eq(Object a, Object b) {
         if (a instanceof Number x && b instanceof Number y) {
+            if (isIntegral(x) && isIntegral(y)) {
+                return x.longValue() == y.longValue();
+            }
             return Double.compare(x.doubleValue(), y.doubleValue()) == 0;
         }
         return a.equals(b);
@@ -118,12 +121,20 @@ public final class Predicate {
     @SuppressWarnings("unchecked")
     private static Integer cmp(Object a, Object b) {
         if (a instanceof Number x && b instanceof Number y) {
+            if (isIntegral(x) && isIntegral(y)) {
+                return Long.compare(x.longValue(), y.longValue());
+            }
             return Double.compare(x.doubleValue(), y.doubleValue());
         }
         if (a.getClass() == b.getClass() && a instanceof Comparable<?>) {
             return ((Comparable<Object>) a).compareTo(b);
         }
         return null;
+    }
+
+    /** Byte/Short/Integer/Long carry exact values; Float/Double are compared via doubleValue(). */
+    private static boolean isIntegral(Number n) {
+        return n instanceof Long || n instanceof Integer || n instanceof Short || n instanceof Byte;
     }
 
     private String buildLiteral() {
@@ -139,6 +150,18 @@ public final class Predicate {
 
     private static String canonical(Object v) {
         if (v instanceof Number n) {
+            if (isIntegral(n)) {
+                long l = n.longValue();
+                if ((long) (double) l == l) {
+                    // Exactly representable as a double: canonicalize like any other number so
+                    // e.g. Integer 18 and Double 18.0 remain the same predicate (see eq()/cmp()).
+                    return "n:" + (double) l;
+                }
+                // Beyond double's 2^53 exact-integer range: doubleValue() would collapse distinct
+                // longs (e.g. snowflake IDs, nanosecond timestamps) onto the same value, so keep
+                // the exact long rather than falling back to doubleValue().
+                return "n:L:" + l;
+            }
             return "n:" + n.doubleValue();
         }
         return v.getClass().getName() + ":" + v;
