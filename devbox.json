@@ -9,7 +9,7 @@
       "echo 'Devbox ready: '$(java -version 2>&1 | head -n 1)' / '$(gradle --version | grep Gradle)"
     ],
     "scripts": {
-      "build": "gradle build",
+      "build": "gradle assemble testClasses",
       "test": "gradle test",
       "run": "gradle bootRun",
       "clean": "gradle clean"

@@ -42,12 +42,12 @@ devbox run run
 
 Available scripts (defined in `devbox.json`):
 
-| Script  | Description                          |
-|---------|---------------------------------------|
-| `build` | `gradle build`                        |
-| `test`  | `gradle test`                         |
-| `run`   | `gradle bootRun`                      |
-| `clean` | `gradle clean`                        |
+| Script  | Description                                        |
+|---------|-----------------------------------------------------|
+| `build` | `gradle assemble testClasses` — compiles main and test sources and builds the jar, without running tests |
+| `test`  | `gradle test` — runs the tests compiled by `build`   |
+| `run`   | `gradle bootRun`                                     |
+| `clean` | `gradle clean`                                       |
 
 These same `devbox run <script>` commands can be used from CI or from Claude Code, so the toolchain doesn't need to be installed separately on the host.
 

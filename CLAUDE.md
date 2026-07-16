@@ -14,8 +14,8 @@ Defined in `devbox.json`:
 
 | Command            | Effect            |
 |---------------------|-------------------|
-| `devbox run build`  | `gradle build`    |
-| `devbox run test`   | `gradle test`     |
+| `devbox run build`  | `gradle assemble testClasses` — compiles main and test sources and builds the jar, without running tests |
+| `devbox run test`   | `gradle test` — runs the tests compiled by `build` |
 | `devbox run run`    | `gradle bootRun`  |
 | `devbox run clean`  | `gradle clean`    |
 
