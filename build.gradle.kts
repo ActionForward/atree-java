@@ -26,4 +26,6 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    maxParallelForks = 1
+    maxHeapSize = "384m"
 }

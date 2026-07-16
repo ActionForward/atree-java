@@ -14,10 +14,10 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build
-        run: devbox run build
+        run: devbox run -- gradle build --no-daemon
 
       - name: Test
-        run: devbox run test
+        run: devbox run -- gradle test --no-daemon
 
       - name: Publish test report
         if: always()
